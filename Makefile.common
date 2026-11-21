@@ -17,7 +17,6 @@ ROM_BUILD_DIR = build
 OBJDIR = obj
 
 BATTERY = -Wl-g__start_save=0
-PS2_KEYBOARD ?= 0
 
 CFLAGS = $(PLATFORM) -I$(TOP)include -Wa-I$(TOP)include
 CFLAGS += $(if $(filter 1,$(PS2_KEYBOARD)),-DPS2_KEYBOARD)
@@ -61,6 +60,9 @@ ENGINE_OBJS = $(CSRC:%.c=$(TOP)$(OBJDIR)/%.o) \
 OBJS = $(ENGINE_OBJS)
 
 all:	settings directories BUILD
+
+-include Makefile.build
+PS2_KEYBOARD ?= 0
 
 .PHONY:	directories clean release debug profile AP DMG CGB SGB MBC3 MBC5 hUGE GBT test rom BUILD
 .SECONDARY:	$(OBJS)
