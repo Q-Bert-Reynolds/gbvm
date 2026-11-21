@@ -7,101 +7,117 @@ _keyboard_serial_receive::
         .globl _kb_raw, _kb_raw_errors, _kb_raw_read, _kb_raw_write, _kb_raw_fault
 
         ; Fixed-bank receiver; interrupts remain masked through the PS/2 frame.
-        xor a
-        ld (_kb_rx_error), a
-        ld (_kb_rx_code), a
-        ldh a, (0x01)
-        ld b, a;store first 8 bits of scan code (S0123456)
+        ; A PS/2 frame is 11 bits: start(0) d0..d7 parity(odd) stop(1).
+        ; On entry SB holds the first 8: S d0 d1 d2 d3 d4 d5 d6 (bit 7 = S).
+        ldh a, (.SB)
+        ld b, a
 
-kb_rx_testStartBit:
-        bit 7, b;test start bit, should always be 0
-        jr z, kb_rx_waitForLastBits
-kb_rx_startBitError:
-        ld a, #0x04
-        ld (_kb_rx_error), a
-        jp kb_rx_queue_frame;bail early if start bit not 0
-
-kb_rx_waitForLastBits:
+        ; Collect d7, parity and stop. SB is free now, so seed it with a
+        ; marker bit: after exactly 3 shifts SB == 0b00001 d7 P F, which no
+        ; other shift count can produce.
+        ld a, #0x01
+        ldh (.SB), a
         ld a, #0x80
-        ldh (0x02), a      ;ask for more bits using keyboard clock
-        xor a
-        ld (_kb_rx_error), a ;reset current error code
-        ld a, b          ;S0123456
-        swap a           ;3456S012
-        rrca             ;23456S01
-        and #249 ;23456xxx, bit 7 and parity unknown
-        or #1 ;23456xxF, finish bit is always 1
-        ld c, a          ;expected value after shift
-        ld e, #255          ;timer
+        ldh (.SC), a      ; external clock: ask for more bits
+        ld e, #255        ; timeout
 kb_rx_pollBitsLoop:
-        ldh a, (0x01)
-        ld d, a;actual value
-        and #249;exit condition
-        cp c;if bits & exit == expected, done
+        ldh a, (.SB)
+        ld c, a
+        and #0xF8
+        cp #0x08
         jr z, kb_rx_allBitsRead
         dec e
-        jr z, kb_rx_timeout
-        jr kb_rx_pollBitsLoop
-kb_rx_timeout:
-        ld a, (_kb_rx_error)
-        or #0x20
-        ld (_kb_rx_error), a
+        jr nz, kb_rx_pollBitsLoop
+
+        ; Timeout: bits were lost (e.g. the ISR ran too late for bit 9) and
+        ; the keyboard has since gone idle, so we are already at a frame
+        ; boundary and need no drain.
+        ld a, #0x01
+        ldh (.SC), a      ; stop, internal clock
+        ld d, #0          ; code
+        ld e, #0x20       ; KB_ERROR_TIMEOUT
+        jr kb_rx_queue_frame
 
 kb_rx_allBitsRead:
-        ld c, d;replace incomplete expected value with actual value (234567PF)
         ld a, #0x01
-        ldh (0x02), a;stop asking for stuff, use internal clock
+        ldh (.SC), a      ; stop, internal clock
+        ld e, #0          ; error flags
 
+        bit 7, b          ; start bit must be 0
+        jr z, kb_rx_testFinishBit
+        ld e, #0x04       ; KB_ERROR_START
 kb_rx_testFinishBit:
-        bit 0, c;test finish bit, should always be 1
-        jr nz, kb_rx_storeParityBit
-kb_rx_finishBitError:
-        ld a, (_kb_rx_error)
-        or #0x01
-        ld (_kb_rx_error), a
+        bit 0, c          ; stop bit must be 1
+        jr nz, kb_rx_buildData
+        set 0, e          ; KB_ERROR_STOP
 
-kb_rx_storeParityBit:
-        ld a, c
-        srl a;bit 0 is parity
-        and #1
-        ld e, a
+kb_rx_buildData:
+        sla b             ; b = d0 d1 d2 d3 d4 d5 d6 0
+        bit 2, c
+        jr z, kb_rx_reverseAndCount
+        set 0, b          ; b = d0 d1 d2 d3 d4 d5 d6 d7
 
-kb_rx_storeDataBits:
-        sla b  ;0123456x
-        ld a, c;234567PF
-        srl a  ;x234567P
-        srl a  ;xx234567
-        or b;01234567
-        ld d, a;data bits
-
-        ; ;data (d) is 01234567, needs to be 76543210 in a
-        ; ;we can count bits as we do so to test Parity Bit
-kb_rx_reverseAndCountDataBits:
-        ld b, #8;bits left
-        ld c, #0;bit sum
+        ; Reverse b into a (d7..d0) while counting set bits in h.
+kb_rx_reverseAndCount:
+        ld d, #8          ; bits left
+        ld h, #0          ; bit sum
 kb_rx_reverseAndCountLoop:
-        srl d;shift data right out of d into carry
-        rl a;rotate data left from carry into a
-        bit 0, a
-        jr z, kb_rx_decrementBitsLeft
-kb_rx_addBit:
-        inc c;if new bit is 1, increment sum
-kb_rx_decrementBitsLeft:
-        dec b;bits left
+        srl b             ; next data bit -> carry
+        jr nc, kb_rx_rotateBit
+        inc h             ; inc leaves carry intact
+kb_rx_rotateBit:
+        rla               ; carry -> a
+        dec d
         jr nz, kb_rx_reverseAndCountLoop
-kb_rx_storeScanCode:
-        ld (_kb_rx_code), a
+        ld d, a           ; scan code
 
-kb_rx_testParityBit:
-        ld a, c;bit sum
+        ; Odd parity: (bit sum + P) must be odd.
+        ld a, c
+        rrca              ; bit 0 = P
+        xor h
         and #1
-        cp e;bit 0 of e is parity, and bit 0 of a is even/odd. These should never be equal.
-        jr nz, kb_rx_queue_frame
-kb_rx_parityBitError:
-        ld a, (_kb_rx_error)
-        or #0x02
-        ld (_kb_rx_error), a
+        jr nz, kb_rx_checkErrors
+        set 1, e          ; KB_ERROR_PARITY
 
+kb_rx_checkErrors:
+        ld a, e
+        or a
+        jr z, kb_rx_queue_frame
+
+        ; Framing/parity error: we may be misaligned with the keyboard's
+        ; frames. Discard bits until the clock stays quiet for longer than a
+        ; PS/2 bit period (<= 100us), which can only happen between frames.
+        ; One idle-loop pass is 16 M-cycles; 24 passes is ~367us on DMG and
+        ; ~183us in CGB double speed. h caps restarts so a noisy clock line
+        ; cannot hang the CPU.
+        ld h, #0
+kb_rx_drainRestart:
+        ld l, #24
+        ld a, #0x01
+        ldh (.SB), a
+        ld a, #0x80
+        ldh (.SC), a
+kb_rx_drainLoop:
+        ldh a, (.SB)
+        dec a
+        jr nz, kb_rx_drainBit     ; marker moved: a bit arrived
+        ldh a, (.SC)
+        rlca
+        jr nc, kb_rx_drainBit     ; transfer completed: re-arm
+        dec l
+        jr nz, kb_rx_drainLoop
+        jr kb_rx_drainDone
+kb_rx_drainBit:
+        dec h
+        jr nz, kb_rx_drainRestart
+kb_rx_drainDone:
+        ld a, #0x01
+        ldh (.SC), a
+        ldh a, (.IF)
+        and #0xF7         ; drop any transfer-complete flag raised while draining
+        ldh (.IF), a
+
+        ; d = scan code, e = error flags
 kb_rx_queue_frame:
         ld a, (_kb_raw_write)
         ld c, a
@@ -114,12 +130,10 @@ kb_rx_queue_frame:
         ld b, #0
         ld hl, #_kb_raw
         add hl, bc
-        ld a, (_kb_rx_code)
-        ld (hl), a
+        ld (hl), d
         ld hl, #_kb_raw_errors
         add hl, bc
-        ld a, (_kb_rx_error)
-        ld (hl), a
+        ld (hl), e
         ld a, c
         inc a
         and #31
@@ -131,16 +145,10 @@ kb_rx_overflow:
         ld (_kb_raw_fault), a
 kb_rx_arm:
         xor a
-        ldh (0x01), a
+        ldh (.SB), a
         ld a, #0x80
-        ldh (0x02), a
+        ldh (.SC), a
         ret
-
-        .area _DATA
-_kb_rx_error:
-        .ds 1
-_kb_rx_code:
-        .ds 1
 #else
         ret
 #endif

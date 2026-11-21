@@ -112,17 +112,22 @@ static void decode(UBYTE code) {
     }
 }
 
+// interrupts must be disabled when called
+static void clear_locked(void) {
+    if (keyboard_enabled) SC_REG = 0;
+    kb_raw_read = kb_raw_write = kb_raw_fault = 0;
+    keyboard_errors = 0;
+    reset_decoder();
+    if (keyboard_enabled) {
+        IF_REG &= ~SIO_IFLAG;
+        SB_REG = 0;
+        SC_REG = 0x80;
+    }
+}
+
 void keyboard_clear(void) BANKED {
     CRITICAL {
-        if (keyboard_enabled) SC_REG = 0;
-        kb_raw_read = kb_raw_write = kb_raw_fault = 0;
-        keyboard_errors = 0;
-        reset_decoder();
-        if (keyboard_enabled) {
-            IF_REG &= ~SIO_IFLAG;
-            SB_REG = 0;
-            SC_REG = 0x80;
-        }
+        clear_locked();
     }
 }
 
@@ -136,7 +141,7 @@ UBYTE keyboard_set_enabled(UBYTE enabled) BANKED {
         SC_REG = 0;
         keyboard_enabled = FALSE;
         IF_REG &= ~SIO_IFLAG;
-        keyboard_clear();
+        clear_locked();
         SIO_init();
         SIO_status = IO_IDLE;
         link_byte_sent = FALSE;

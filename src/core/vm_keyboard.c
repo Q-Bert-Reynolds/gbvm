@@ -4,7 +4,7 @@
 #include "keyboard.h"
 #endif
 
-#define OUTPUT(arg) (**(UWORD **)VM_REF_TO_PTR(arg))
+#define OUTPUT(arg) (*(UWORD *)VM_REF_TO_PTR(*(INT16 *)VM_REF_TO_PTR(arg)))
 
 void keyboard_enable_native(SCRIPT_CTX * THIS) OLDCALL BANKED {
 #ifdef PS2_KEYBOARD
