@@ -1,12 +1,11 @@
         .include "global.s"
 
-        .globl  _on_SIO_receive
+        .globl  _on_SIO_receive, _keyboard_enabled, _keyboard_serial_receive
 
         .area   _HEADER_SIO (ABS)
 
         .org    0x58            ; SIO
 .int_SIO:
-        ei
         jp .sio_ISR
 
         .area   _DATA
@@ -47,6 +46,19 @@ _link_next_mode::
         push bc
         push de
 
+#ifdef PS2_KEYBOARD
+        ld a, (_keyboard_enabled)
+        or a
+        jr z, .sio_link
+        call _keyboard_serial_receive
+        pop de
+        pop bc
+        pop hl
+        pop af
+        reti
+.sio_link:
+#endif
+        ei
         ld c, #.SB
 
         xor a

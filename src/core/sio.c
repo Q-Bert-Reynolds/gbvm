@@ -2,10 +2,15 @@
 
 #include <gbdk/platform.h>
 #include "sio.h"
+#ifdef PS2_KEYBOARD
+#include "keyboard.h"
+#endif
 
 extern volatile UBYTE SIO_status;
 void SIO_send_byte(UBYTE data) OLDCALL PRESERVES_REGS(b, c, d, e, h, l);
 void SIO_receive(void) PRESERVES_REGS(b, c, d, e, h, l);
+
+volatile UBYTE keyboard_enabled;
 
 UBYTE link_operation_mode;
 
@@ -39,6 +44,9 @@ void on_SIO_receive(UBYTE data) OLDCALL NONBANKED {
 }
 
 UBYTE SIO_update(void) OLDCALL NONBANKED {
+#ifdef PS2_KEYBOARD
+    if (keyboard_enabled) return TRUE;
+#endif
     if (SIO_status == IO_ERROR) {
         link_operation_mode = LINK_MODE_NONE;
         link_packet_len = link_packet_snd_len = 0;

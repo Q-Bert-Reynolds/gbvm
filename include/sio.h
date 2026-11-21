@@ -4,6 +4,9 @@
 #include <gbdk/platform.h>
 
 #include "compat.h"
+#ifdef PS2_KEYBOARD
+#include "keyboard.h"
+#endif
 
 #define LINK_MAX_PACKET_LENGTH 32
 
@@ -19,6 +22,7 @@ extern UBYTE link_operation_mode;
 
 extern UBYTE link_packet[];
 extern UBYTE link_byte_sent;
+extern UBYTE link_next_mode;
 
 extern UBYTE link_packet_len;
 extern UBYTE * link_packet_ptr;
@@ -31,6 +35,9 @@ extern UBYTE link_packet_sent;
 void SIO_init(void) BANKED;
 
 inline void SIO_set_mode(UBYTE mode) {
+#ifdef PS2_KEYBOARD
+    if (keyboard_enabled) { keyboard_errors |= KB_ERROR_PORT_BUSY; return; }
+#endif
     link_operation_mode = mode;
     if (mode == LINK_MODE_SLAVE) {
         SIO_receive();
@@ -38,6 +45,9 @@ inline void SIO_set_mode(UBYTE mode) {
 }
 
 inline void SIO_send_async(UBYTE len, const UBYTE * data) {
+#ifdef PS2_KEYBOARD
+    if (keyboard_enabled) { keyboard_errors |= KB_ERROR_PORT_BUSY; return; }
+#endif
     link_packet_snd_len = len;
     link_packet_snd_ptr = data;
     link_byte_sent = FALSE;

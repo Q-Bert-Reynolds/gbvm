@@ -2,6 +2,9 @@
 
 #include <string.h>
 #include "input.h"
+#ifdef PS2_KEYBOARD
+#include "keyboard.h"
+#endif
 
 joypads_t joypads;
 UBYTE frame_joy;
@@ -22,6 +25,9 @@ void input_init(void) BANKED {
 }
 
 void input_update(void) NONBANKED {
+#ifdef PS2_KEYBOARD
+    keyboard_update();
+#endif
     last_joy = joypads.joy0;
 #ifdef SGB
     joypad_ex(&joypads);

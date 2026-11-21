@@ -17,8 +17,10 @@ ROM_BUILD_DIR = build
 OBJDIR = obj
 
 BATTERY = -Wl-g__start_save=0
+PS2_KEYBOARD ?= 0
 
 CFLAGS = $(PLATFORM) -I$(TOP)include -Wa-I$(TOP)include
+CFLAGS += $(if $(filter 1,$(PS2_KEYBOARD)),-DPS2_KEYBOARD)
 
 LFLAGS_NBANKS += -autobank -Wb-ext=.rel -Wm-yoA -Wm-ya4
 LFLAGS_SYMBOLS = -Wl-j -Wl-m -Wl-w -Wm-yS
@@ -44,7 +46,8 @@ TARGET = $(ROM_BUILD_DIR)/rom.gb
 ASRC = $(foreach dir,$(TOP)src/$(PLAT),$(notdir $(wildcard $(dir)/*.s))) 
 CSRC = $(foreach dir,$(TOP)src,$(notdir $(wildcard $(dir)/*.c))) 
 ACORE = $(foreach dir,$(TOP)src/core/$(PLAT),$(notdir $(wildcard $(dir)/*.s))) 
-CCORE = $(foreach dir,$(TOP)src/core,$(notdir $(wildcard $(dir)/*.c))) 
+CCORE = $(filter-out keyboard.c,$(foreach dir,$(TOP)src/core,$(notdir $(wildcard $(dir)/*.c)))) \
+	$(if $(filter 1,$(PS2_KEYBOARD)),keyboard.c)
 CSTATES = $(foreach dir,$(TOP)src/states,$(notdir $(wildcard $(dir)/*.c))) 
 ASTATES = $(foreach dir,$(TOP)src/states/$(PLAT),$(notdir $(wildcard $(dir)/*.s))) 
 
@@ -130,6 +133,14 @@ $(OBJDIR):
 
 $(TOP)$(OBJDIR)/%.o:	$(TOP)src/core/%.c
 	$(CC) $(CFLAGS) -Wf-MMD $(filter -Wf-ba%, $(subst .d,-Wf-ba,$(suffix $(<:%.c=%)))) -c -o $@ $<
+
+$(TOP)$(OBJDIR)/keyboard_serial.o: $(TOP)src/core/$(PLAT)/keyboard_serial.s
+	$(GBDK)/bin/sdcpp -P -nostdinc -undef -x assembler-with-cpp $(filter -D%,$(CFLAGS)) $< -o $(TOP)$(OBJDIR)/keyboard_serial.s
+	$(CC) $(CFLAGS) -c -o $@ $(TOP)$(OBJDIR)/keyboard_serial.s
+
+$(TOP)$(OBJDIR)/interrupt_sio.o: $(TOP)src/core/$(PLAT)/interrupt_sio.s
+	$(GBDK)/bin/sdcpp -P -nostdinc -undef -x assembler-with-cpp $(filter -D%,$(CFLAGS)) $< -o $(TOP)$(OBJDIR)/interrupt_sio.s
+	$(CC) $(CFLAGS) -c -o $@ $(TOP)$(OBJDIR)/interrupt_sio.s
 
 $(TOP)$(OBJDIR)/%.o:	$(TOP)src/core/$(PLAT)/%.s
 	$(CC) $(CFLAGS) -c -o $@ $<

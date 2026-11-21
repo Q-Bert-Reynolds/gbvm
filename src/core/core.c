@@ -25,6 +25,9 @@
 #include "states_caller.h"
 #include "load_save.h"
 #include "sio.h"
+#ifdef PS2_KEYBOARD
+    #include "keyboard.h"
+#endif
 #ifdef SGB
     #include "sgb_border.h"
     #include "data/border.h"
@@ -44,6 +47,9 @@ UBYTE pause_state_update;
 void core_reset(void) BANKED {
     // cleanup core stuff
     SIO_init();
+#ifdef PS2_KEYBOARD
+    keyboard_init();
+#endif
     input_init();
     load_init();
     music_init_driver();
