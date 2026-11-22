@@ -26,7 +26,7 @@ void input_init(void) BANKED {
 
 void input_update(void) NONBANKED {
 #ifdef PS2_KEYBOARD
-    keyboard_update();
+    keyboard_begin_frame();
 #endif
     last_joy = joypads.joy0;
 #ifdef SGB

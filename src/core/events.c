@@ -4,6 +4,11 @@
 
 #include "events.h"
 #include "input.h"
+#ifdef PS2_KEYBOARD
+#include "keyboard.h"
+script_event_t keyboard_events[MAX_KEYBOARD_SCRIPTS];
+UWORD keyboard_event_keys[MAX_KEYBOARD_SCRIPTS];
+#endif
 
 script_event_t input_events[8];
 UBYTE input_slots[8];
@@ -19,7 +24,52 @@ void events_init(UBYTE preserve) BANKED {
         memset(input_slots, 0, sizeof(input_slots));
         memset(input_events, 0, sizeof(input_events));
     }
+#ifdef PS2_KEYBOARD
+    if (preserve) {
+        for (UBYTE i = 0; i != MAX_KEYBOARD_SCRIPTS; i++)
+            keyboard_events[i].handle = 0;
+    } else {
+        memset(keyboard_events, 0, sizeof(keyboard_events));
+        memset(keyboard_event_keys, 0, sizeof(keyboard_event_keys));
+    }
+#endif
 }
+
+#ifdef PS2_KEYBOARD
+void keyboard_script_attach(UWORD key, UBYTE bank, void * pc) BANKED {
+    UBYTE slot = MAX_KEYBOARD_SCRIPTS;
+    if (key >= 512u) return;
+    for (UBYTE i = 0; i != MAX_KEYBOARD_SCRIPTS; i++) {
+        if (keyboard_events[i].script_addr && keyboard_event_keys[i] == key) {
+            slot = i;
+            break;
+        }
+        if (!keyboard_events[i].script_addr && slot == MAX_KEYBOARD_SCRIPTS) slot = i;
+    }
+    if (slot == MAX_KEYBOARD_SCRIPTS) {
+        keyboard_errors |= KB_ERROR_OVERFLOW;
+        return;
+    }
+    keyboard_event_keys[slot] = key;
+    keyboard_events[slot].script_bank = bank;
+    keyboard_events[slot].script_addr = pc;
+}
+
+void keyboard_script_detach(UWORD key) BANKED {
+    for (UBYTE i = 0; i != MAX_KEYBOARD_SCRIPTS; i++) {
+        if (keyboard_event_keys[i] == key) keyboard_events[i].script_addr = NULL;
+    }
+}
+
+void keyboard_events_update(void) BANKED {
+    for (UBYTE i = 0; i != MAX_KEYBOARD_SCRIPTS; i++) {
+        script_event_t * event = &keyboard_events[i];
+        if (event->script_addr && keyboard_key_pressed(keyboard_event_keys[i]) &&
+            ((event->handle == 0) || (event->handle & SCRIPT_TERMINATED)))
+            script_execute(event->script_bank, event->script_addr, &event->handle, 1, (int)keyboard_event_keys[i]);
+    }
+}
+#endif
 
 void events_update(void) NONBANKED {
     UBYTE * slot_ptr = input_slots;

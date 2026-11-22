@@ -2,9 +2,39 @@
 #include "vm_keyboard.h"
 #ifdef PS2_KEYBOARD
 #include "keyboard.h"
+#include "events.h"
 #endif
 
 #define OUTPUT(arg) (*(UWORD *)VM_REF_TO_PTR(*(INT16 *)VM_REF_TO_PTR(arg)))
+
+UBYTE keyboard_wait(void * THIS, UBYTE start, UWORD * stack_frame) OLDCALL BANKED {
+    start;
+#ifdef PS2_KEYBOARD
+    if (keyboard_key_pressed(stack_frame[0])) return TRUE;
+#else
+    stack_frame;
+#endif
+    ((SCRIPT_CTX *)THIS)->waitable = TRUE;
+    return FALSE;
+}
+
+void keyboard_attach_native(SCRIPT_CTX * THIS) OLDCALL BANKED {
+#ifdef PS2_KEYBOARD
+    keyboard_script_attach(*(UWORD *)VM_REF_TO_PTR(FN_ARG0),
+                           *(UWORD *)VM_REF_TO_PTR(FN_ARG1),
+                           (void *)*(UWORD *)VM_REF_TO_PTR(FN_ARG2));
+#else
+    THIS;
+#endif
+}
+
+void keyboard_detach_native(SCRIPT_CTX * THIS) OLDCALL BANKED {
+#ifdef PS2_KEYBOARD
+    keyboard_script_detach(*(UWORD *)VM_REF_TO_PTR(FN_ARG0));
+#else
+    THIS;
+#endif
+}
 
 void keyboard_enable_native(SCRIPT_CTX * THIS) OLDCALL BANKED {
 #ifdef PS2_KEYBOARD

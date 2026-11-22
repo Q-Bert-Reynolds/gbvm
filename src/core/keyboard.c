@@ -8,6 +8,8 @@ UBYTE keyboard_modifiers, keyboard_errors;
 volatile UBYTE kb_raw[KB_RAW_SIZE], kb_raw_errors[KB_RAW_SIZE];
 volatile UBYTE kb_raw_read, kb_raw_write, kb_raw_fault;
 static UBYTE held[64];
+static UBYTE pressed[64];
+static UBYTE pending_pressed[64];
 static keyboard_event_t events[16];
 static UBYTE characters[32];
 static UBYTE event_read, event_write, char_read, char_write;
@@ -37,6 +39,8 @@ static UBYTE is_held(UWORD key) {
 
 static void reset_decoder(void) {
     memset(held, 0, sizeof(held));
+    memset(pressed, 0, sizeof(pressed));
+    memset(pending_pressed, 0, sizeof(pending_pressed));
     keyboard_modifiers = prefix = pause_skip = 0;
     event_read = event_write = char_read = char_write = 0;
 }
@@ -84,6 +88,7 @@ static void decode(UBYTE code) {
     mask = 1u << (key & 7u);
     if (down) held[key >> 3] |= mask;
     else held[key >> 3] &= ~mask;
+    if (down && !repeat) pending_pressed[key >> 3] |= mask;
     if (down && !repeat) {
         if (key == 0x58) keyboard_modifiers ^= KB_MOD_CAPS;
         if (key == 0x77) keyboard_modifiers ^= KB_MOD_NUM;
@@ -184,6 +189,14 @@ void keyboard_update(void) BANKED {
     } while (available);
 }
 
+void keyboard_begin_frame(void) BANKED {
+    // Native read events may also decode input between frames. Publish those
+    // presses together with newly received input, independently of the queues.
+    keyboard_update();
+    memcpy(pressed, pending_pressed, sizeof(pressed));
+    memset(pending_pressed, 0, sizeof(pending_pressed));
+}
+
 UBYTE keyboard_read_event(keyboard_event_t * event) BANKED {
     memset(event, 0, sizeof(*event));
     if (event_read != event_write) {
@@ -206,4 +219,8 @@ UBYTE keyboard_read_character(void) BANKED {
 
 UBYTE keyboard_key_held(UWORD key) BANKED {
     return is_held(key);
+}
+
+UBYTE keyboard_key_pressed(UWORD key) BANKED {
+    return key < 512u && (pressed[key >> 3] & (1u << (key & 7u))) != 0;
 }

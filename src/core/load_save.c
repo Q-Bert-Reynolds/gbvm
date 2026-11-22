@@ -50,6 +50,9 @@ const save_point_t save_points[] = {
     SAVEPOINT(actors_active_head, 18), SAVEPOINT(actors_inactive_head, 19), SAVEPOINT(player_moving, 20), SAVEPOINT(player_collision_actor, 21),
     // system
     SAVEPOINT(__rand_seed, 22),
+#ifdef PS2_KEYBOARD
+    SAVEPOINT(keyboard_events, 23), SAVEPOINT(keyboard_event_keys, 24),
+#endif
     // terminator
     SAVEPOINTS_END
 };

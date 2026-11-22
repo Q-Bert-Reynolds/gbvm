@@ -12,6 +12,15 @@ typedef struct script_event_t {
 extern script_event_t input_events[8];
 extern UBYTE input_slots[8];
 
+#ifdef PS2_KEYBOARD
+#define MAX_KEYBOARD_SCRIPTS 16
+extern script_event_t keyboard_events[MAX_KEYBOARD_SCRIPTS];
+extern UWORD keyboard_event_keys[MAX_KEYBOARD_SCRIPTS];
+void keyboard_events_update(void) BANKED;
+void keyboard_script_attach(UWORD key, UBYTE bank, void * pc) BANKED;
+void keyboard_script_detach(UWORD key) BANKED;
+#endif
+
 typedef struct timer_time_t {
     UBYTE value, remains;
 } timer_time_t;

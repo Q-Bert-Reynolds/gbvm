@@ -79,6 +79,9 @@ void process_VM(void) {
                 }
                 if (!VM_ISLOCKED()) {
                     if (joy != 0) events_update();                      // update joypad events (must be the first)
+#ifdef PS2_KEYBOARD
+                    keyboard_events_update();
+#endif
                     if (!pause_state_update) state_update();                                     // update current scene, depending on its type
                     if ((game_time & 0x0F) == 0x00) timers_update();    // update timers
                     music_events_update();                              // update music events

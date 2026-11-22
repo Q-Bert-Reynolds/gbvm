@@ -42,9 +42,11 @@ void keyboard_init(void) BANKED;
 UBYTE keyboard_set_enabled(UBYTE enabled) BANKED;
 void keyboard_clear(void) BANKED;
 void keyboard_update(void) BANKED;
+void keyboard_begin_frame(void) BANKED;
 UBYTE keyboard_read_event(keyboard_event_t * event) BANKED;
 UBYTE keyboard_read_character(void) BANKED;
 UBYTE keyboard_key_held(UWORD key) BANKED;
+UBYTE keyboard_key_pressed(UWORD key) BANKED;
 void keyboard_serial_receive(void) NONBANKED NAKED;
 
 #endif
