@@ -9,6 +9,7 @@
 #include "vm_ui.h"
 
 #include "ui.h"
+#include "text_input.h"
 #include "input.h"
 #include "scroll.h"
 #include "gbs_types.h"
@@ -17,6 +18,15 @@
 #include "data/data_bootstrap.h"
 
 BANKREF(VM_UI)
+
+// Array elements hold literal ASCII, never UI control codes or format strings.
+void text_array_load_native(SCRIPT_CTX * THIS) OLDCALL BANKED {
+    const UWORD * source = VM_REF_TO_PTR(*(INT16 *)VM_REF_TO_PTR(FN_ARG0));
+    UWORD capacity = *(UWORD *)VM_REF_TO_PTR(FN_ARG1);
+    UWORD * offset = VM_REF_TO_PTR(*(INT16 *)VM_REF_TO_PTR(FN_ARG2));
+    UWORD * more = VM_REF_TO_PTR(*(INT16 *)VM_REF_TO_PTR(FN_ARG3));
+    text_array_format(source, capacity, offset, more, ui_text_data);
+}
 
 typedef struct set_submap_params_t {
     UBYTE x;

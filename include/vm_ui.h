@@ -11,6 +11,7 @@ BANKREF_EXTERN(VM_UI)
 
 void vm_load_text(DUMMY0_t dummy0, DUMMY1_t dummy1, SCRIPT_CTX * THIS, UBYTE nargs) OLDCALL NONBANKED;
 void vm_load_text_ex(DUMMY0_t dummy0, DUMMY1_t dummy1, SCRIPT_CTX * THIS, UBYTE n) OLDCALL NONBANKED;
+void text_array_load_native(SCRIPT_CTX * THIS) OLDCALL BANKED;
 void vm_display_text(SCRIPT_CTX * THIS, UBYTE options, UBYTE start_tile) OLDCALL BANKED;
 void vm_switch_text_layer(SCRIPT_CTX * THIS, UBYTE target) OLDCALL BANKED;
 

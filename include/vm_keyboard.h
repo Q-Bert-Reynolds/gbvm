@@ -9,6 +9,8 @@ void keyboard_read_character_native(SCRIPT_CTX * THIS) OLDCALL BANKED;
 void keyboard_held_native(SCRIPT_CTX * THIS) OLDCALL BANKED;
 void keyboard_status_native(SCRIPT_CTX * THIS) OLDCALL BANKED;
 UBYTE keyboard_wait(void * THIS, UBYTE start, UWORD * stack_frame) OLDCALL BANKED;
+UBYTE keyboard_text_input(void * context, UBYTE start, UWORD * stack_frame) OLDCALL BANKED;
+UBYTE keyboard_text_wait(void * context, UBYTE start, UWORD * stack_frame) OLDCALL BANKED;
 void keyboard_attach_native(SCRIPT_CTX * THIS) OLDCALL BANKED;
 void keyboard_detach_native(SCRIPT_CTX * THIS) OLDCALL BANKED;
 #endif
