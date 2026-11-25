@@ -26,6 +26,23 @@
 #define KB_EVENT_VALID  0x80u
 #define KB_RAW_SIZE     32u
 
+#define PS2_KEY_ENTER        0x05Au
+#define PS2_KEY_NUMPAD_ENTER 0x15Au
+#define PS2_KEY_ESCAPE       0x076u
+#define PS2_KEY_BACKSPACE    0x066u
+#define PS2_KEY_TAB          0x00Du
+#define PS2_KEY_SPACE        0x029u
+#define PS2_KEY_LEFT         0x16Bu
+#define PS2_KEY_RIGHT        0x174u
+#define PS2_KEY_UP           0x175u
+#define PS2_KEY_DOWN         0x172u
+#define PS2_KEY_HOME         0x16Cu
+#define PS2_KEY_END          0x169u
+#define PS2_KEY_INSERT       0x170u
+#define PS2_KEY_DELETE       0x171u
+#define PS2_KEY_PAGE_UP      0x17Du
+#define PS2_KEY_PAGE_DOWN    0x17Au
+
 typedef struct keyboard_event_t {
     UWORD key; /* Set 2 scan code; bit 8 marks an E0 extended key. */
     UBYTE flags;

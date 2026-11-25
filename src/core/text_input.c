@@ -1,6 +1,5 @@
 #pragma bank 255
 #include "text_input.h"
-#ifdef PS2_KEYBOARD
 #include <string.h>
 
 static UBYTE accepted(UBYTE ch, UBYTE flags) {
@@ -29,17 +28,18 @@ void text_input_begin(text_input_t * input, const UWORD * source, UWORD capacity
 
 UBYTE text_input_key(text_input_t * input, UWORD key, UBYTE character) BANKED {
     switch (key) {
-        case 0x5a: case 0x15a: return TEXT_INPUT_CONFIRMED;
-        case 0x76: return TEXT_INPUT_CANCELLED;
-        case 0x16b: if (input->cursor) input->cursor--; return TEXT_INPUT_ACTIVE;
-        case 0x174: if (input->cursor < input->length) input->cursor++; return TEXT_INPUT_ACTIVE;
-        case 0x16c: input->cursor = 0; return TEXT_INPUT_ACTIVE;
-        case 0x169: input->cursor = input->length; return TEXT_INPUT_ACTIVE;
-        case 0x66:
+        case PS2_KEY_ENTER: 
+        case PS2_KEY_NUMPAD_ENTER: return TEXT_INPUT_CONFIRMED;
+        case PS2_KEY_ESCAPE: return TEXT_INPUT_CANCELLED;
+        case PS2_KEY_LEFT: if (input->cursor) input->cursor--; return TEXT_INPUT_ACTIVE;
+        case PS2_KEY_RIGHT: if (input->cursor < input->length) input->cursor++; return TEXT_INPUT_ACTIVE;
+        case PS2_KEY_HOME: input->cursor = 0; return TEXT_INPUT_ACTIVE;
+        case PS2_KEY_END: input->cursor = input->length; return TEXT_INPUT_ACTIVE;
+        case PS2_KEY_BACKSPACE:
             if (!input->cursor) return TEXT_INPUT_ACTIVE;
             input->cursor--;
             // Fall through to delete the character at the cursor.
-        case 0x171:
+        case PS2_KEY_DELETE:
             if (input->cursor < input->length) {
                 memmove(input->text + input->cursor, input->text + input->cursor + 1u, input->length - input->cursor);
                 input->length--;
@@ -58,7 +58,64 @@ void text_input_commit(const text_input_t * input, UWORD * destination, UWORD ca
     UWORD i;
     for (i = 0; i < capacity; i++) destination[i] = i < input->length ? input->text[i] : 0;
 }
-#endif
+
+static const UBYTE osk_keys[3][31] = {
+    "qwertyuiopasdfghjkl'zxcvbnm .-",
+    "1234567890!@#$%^&*()_+-=[]{}:;",
+    "`~\\|/<>?,.\"'!@#$%^&*()_+-=[]{}"
+};
+
+UBYTE text_osk_character(const text_input_t * input, const text_osk_t * osk, UBYTE key) BANKED {
+    UBYTE ch;
+    if (key >= 30u) return 0;
+    if (input->flags & TEXT_INPUT_NUMERIC) ch = key < 10u ? osk_keys[1][key] : 0;
+    else ch = osk_keys[osk->page][key];
+    if (!accepted(ch, input->flags)) return 0;
+    if ((osk->uppercase || (input->flags & TEXT_INPUT_UPPERCASE)) && ch >= 'a' && ch <= 'z') ch -= 'a' - 'A';
+    return ch;
+}
+
+void text_osk_move(const text_input_t * input, text_osk_t * osk, INT8 dx, INT8 dy) BANKED {
+    UBYTE row = osk->selected / 10u, col = osk->selected % 10u, candidate, i, width;
+    if (dx) {
+        width = row == 3u ? 6u : 10u;
+        for (i = 0; i < width; i++) {
+            col = dx < 0 ? (col ? col - 1u : width - 1u) : (col + 1u) % width;
+            candidate = row * 10u + col;
+            if (row == 3u || text_osk_character(input, osk, candidate)) { osk->selected = candidate; return; }
+        }
+    }
+    if (dy) {
+        if (row == 3u) col = col * 2u > 9u ? 9u : col * 2u;
+        for (i = 0; i < 4u; i++) {
+            row = dy < 0 ? (row ? row - 1u : 3u) : (row + 1u) % 4u;
+            if (row == 3u) { osk->selected = 30u + (col * 5u / 9u); return; }
+            candidate = row * 10u + col;
+            // Short filtered rows use the nearest available key to the left.
+            while (!text_osk_character(input, osk, candidate) && candidate > row * 10u) candidate--;
+            if (text_osk_character(input, osk, candidate)) { osk->selected = candidate; return; }
+        }
+    }
+}
+
+UBYTE text_osk_press(text_input_t * input, text_osk_t * osk) BANKED {
+    UBYTE pages;
+    if (osk->selected < 30u) return text_input_key(input, 0, text_osk_character(input, osk, osk->selected));
+    switch (osk->selected) {
+        case 30:
+            if (!(input->flags & TEXT_INPUT_UPPERCASE)) osk->uppercase = !osk->uppercase;
+            break;
+        case 31:
+            pages = (input->flags & TEXT_INPUT_NUMERIC) ? 1 : ((input->flags & TEXT_INPUT_ALPHANUMERIC) ? 2 : 3);
+            osk->page = (osk->page + 1u) % pages;
+            break;
+        case 32: return text_input_key(input, PS2_KEY_LEFT, 0);
+        case 33: return text_input_key(input, PS2_KEY_RIGHT, 0);
+        case 34: return TEXT_INPUT_CONFIRMED;
+        case 35: return TEXT_INPUT_CANCELLED;
+    }
+    return TEXT_INPUT_ACTIVE;
+}
 
 void text_array_format(const UWORD * source, UWORD capacity, UWORD * offset, UWORD * more, UBYTE * out) BANKED {
     UBYTE i, count = 0, column = 0;

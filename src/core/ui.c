@@ -287,6 +287,24 @@ inline void ui_set_tile(UBYTE * addr, UBYTE tile, UBYTE bank) {
     set_vram_byte(addr, tile);
 }
 
+// Fixed cells share the active dialogue font and palette. The OSK owns only
+// the existing text tile range, so scene graphics and actor sprites stay intact.
+void ui_load_text_cell(UBYTE tile, UBYTE character, UBYTE inverted) BANKED {
+    UBYTE pixels[16], i;
+    UBYTE letter = (vwf_current_font_desc.attr & FONT_RECODE) ?
+        ReadBankedUBYTE(vwf_current_font_desc.recode_table + (character & vwf_current_font_desc.mask), vwf_current_font_bank) : character;
+    MemcpyBanked(pixels, vwf_current_font_desc.bitmaps + letter * 16u, sizeof(pixels), vwf_current_font_bank);
+    if (inverted) for (i = 0; i != sizeof(pixels); i++) pixels[i] ^= 0xffu;
+#ifdef CGB
+    VBK_REG = VBK_BANK_0;
+#endif
+    set_bkg_data(tile, 1, pixels);
+}
+
+void ui_place_text_cell(UBYTE x, UBYTE y, UBYTE tile) BANKED {
+    ui_set_tile(GetWinAddr() + ((UWORD)y << 5) + x, tile, 0);
+}
+
 UBYTE ui_draw_text_buffer_char(void) BANKED {
     static UBYTE current_font_idx, current_text_bkg_fill, current_vwf_direction, current_text_ff_joypad, current_text_draw_speed;
 
