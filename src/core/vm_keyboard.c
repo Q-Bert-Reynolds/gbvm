@@ -4,6 +4,8 @@
 #include "text_input.h"
 #include "ui.h"
 #include "vm_ui.h"
+#include "scroll.h"
+#include "system.h"
 #include <string.h>
 #ifdef PS2_KEYBOARD
 #include "keyboard.h"
@@ -18,6 +20,49 @@ static UBYTE osk_glyph_count;
 // for its prompt and glyph cache without reserving more persistent WRAM.
 #define osk_prompt (ui_text_data)
 #define osk_glyphs (ui_text_data + 32)
+
+// Background text uses 16x4 cells, enough for 63 characters and the cursor.
+// Back up their tilemap and attributes in unused dialogue-buffer space. The
+// prompt and expanded glyph cache occupy bytes 0..125 while the OSK is active.
+#define note_tiles (ui_text_data + 128)
+#define note_attributes (ui_text_data + 192)
+static UBYTE note_x, note_y;
+
+static UBYTE * note_address(UBYTE i) {
+    return GetBkgAddr() + ((UWORD)((note_y + i / 16u) & 31u) << 5) + ((note_x + i % 16u) & 31u);
+}
+
+static void note_save(void) {
+    UBYTE i;
+    note_x = ((SCX_REG >> 3) + 2u) & 31u;
+    note_y = ((SCY_REG >> 3) + 4u) & 31u;
+    for (i = 0; i != 64u; i++) {
+        UBYTE * addr = note_address(i);
+#ifdef CGB
+        if (_is_CGB) {
+            VBK_REG = VBK_ATTRIBUTES;
+            note_attributes[i] = get_vram_byte(addr);
+            VBK_REG = VBK_TILES;
+        }
+#endif
+        note_tiles[i] = get_vram_byte(addr);
+    }
+}
+
+static void note_restore(void) {
+    UBYTE i;
+    for (i = 0; i != 64u; i++) {
+        UBYTE * addr = note_address(i);
+#ifdef CGB
+        if (_is_CGB) {
+            VBK_REG = VBK_ATTRIBUTES;
+            set_vram_byte(addr, note_attributes[i]);
+            VBK_REG = VBK_TILES;
+        }
+#endif
+        set_vram_byte(addr, note_tiles[i]);
+    }
+}
 
 static void discard_text_input(void) {
 #ifdef PS2_KEYBOARD
@@ -46,14 +91,43 @@ static void draw_text_input(SCRIPT_CTX * THIS) {
 
 // Cache repeated glyphs instead of allocating one tile for every key and label.
 // Two tiles are reserved for the selected key's inverse highlight (including OK).
+static UBYTE osk_glyph_tile(UBYTE i) {
+    // Background-preview scenes reserve bank-0 tiles 148..191 in addition to
+    // the usual 50 glyph slots. That fits every printable ASCII glyph without
+    // borrowing scene graphics or the two selected-key highlight tiles.
+    return i < 50u ? TEXT_BUFFER_START + i : 148u + i - 50u;
+}
+
 static UBYTE osk_tile(UBYTE ch) {
     UBYTE i;
     if (ch == ' ') return ui_white_tile;
-    for (i = 0; i < osk_glyph_count; i++) if (osk_glyphs[i] == ch) return TEXT_BUFFER_START + i;
-    if (osk_glyph_count == 50u) return 0;
+    for (i = 0; i < osk_glyph_count; i++) if (osk_glyphs[i] == ch) return osk_glyph_tile(i);
+    if (osk_glyph_count == ((text_entry.flags & TEXT_INPUT_BACKGROUND_TEXT) ? 94u : 50u)) return 0;
     osk_glyphs[osk_glyph_count] = ch;
-    ui_load_text_cell(TEXT_BUFFER_START + osk_glyph_count, ch, FALSE);
-    return TEXT_BUFFER_START + osk_glyph_count++;
+    ui_load_text_cell(osk_glyph_tile(osk_glyph_count), ch, FALSE);
+    return osk_glyph_tile(osk_glyph_count++);
+}
+
+static void draw_note(void) {
+    UBYTE i, source = 0, cursor_drawn = FALSE, ch;
+    for (i = 0; i != 64u; i++) {
+        UBYTE * addr = note_address(i);
+        if (!cursor_drawn && source == text_entry.cursor) {
+            ch = '_';
+            cursor_drawn = TRUE;
+        } else if (source < text_entry.length) {
+            ch = (text_entry.flags & TEXT_INPUT_PASSWORD) ? '*' : text_entry.text[source];
+            source++;
+        } else ch = ' ';
+#ifdef CGB
+        if (_is_CGB) {
+            VBK_REG = VBK_ATTRIBUTES;
+            set_vram_byte(addr, text_palette & 7u);
+            VBK_REG = VBK_TILES;
+        }
+#endif
+        set_vram_byte(addr, osk_tile(ch));
+    }
 }
 
 static void draw_osk(SCRIPT_CTX * THIS) {
@@ -85,13 +159,14 @@ static void draw_osk(SCRIPT_CTX * THIS) {
         ui_place_text_cell(action_x[i] + j, 6, tile);
     }
     osk_tile('.'); osk_tile('_');
-    for (i = first; i <= text_entry.length && i <= end; i++) {
+    if (text_entry.flags & TEXT_INPUT_BACKGROUND_TEXT) draw_note();
+    else for (i = first; i <= text_entry.length && i <= end; i++) {
         if (i == text_entry.cursor) ui_place_text_cell(column++, 2, osk_tile('_'));
         if (i < text_entry.length && i < end)
             ui_place_text_cell(column++, 2, osk_tile((text_entry.flags & TEXT_INPUT_PASSWORD) ? '*' : text_entry.text[i]));
     }
     // Prioritize editable text. Unusually diverse prompts are ellipsized if the
-    // monochrome tile cache fills; no background tiles are borrowed for the OSK.
+    // monochrome tile cache fills. Background previews reserve extra glyph tiles.
     for (i = 0; i < 18u && osk_prompt[i]; i++) {
         tile = osk_tile(osk_prompt[i]);
         if (!tile) {
@@ -122,6 +197,7 @@ UBYTE keyboard_text_input(void * context, UBYTE start, UWORD * stack_frame) OLDC
         text_input_begin(&text_entry, destination, stack_frame[1], stack_frame[2], stack_frame[3]);
         memset(&text_osk, 0, sizeof(text_osk));
         osk_prompt[18] = 0;
+        if ((text_entry.flags & (TEXT_INPUT_OSK | TEXT_INPUT_BACKGROUND_TEXT)) == (TEXT_INPUT_OSK | TEXT_INPUT_BACKGROUND_TEXT)) note_save();
         osk_previous_joy = joy; osk_repeat = 0;
         discard_text_input();
         dirty = TRUE;
@@ -165,6 +241,7 @@ UBYTE keyboard_text_input(void * context, UBYTE start, UWORD * stack_frame) OLDC
     if (status != TEXT_INPUT_ACTIVE) {
         if (status == TEXT_INPUT_CONFIRMED) text_input_commit(&text_entry, destination, stack_frame[1]);
         *result = status == TEXT_INPUT_CONFIRMED ? 1 : 0;
+        if ((text_entry.flags & (TEXT_INPUT_OSK | TEXT_INPUT_BACKGROUND_TEXT)) == (TEXT_INPUT_OSK | TEXT_INPUT_BACKGROUND_TEXT)) note_restore();
         discard_text_input();
         return TRUE;
     }
