@@ -84,6 +84,8 @@ void ui_update(void) BANKED;
 void ui_load_tiles(void) BANKED;
 
 void ui_set_start_tile(UBYTE start_tile, UBYTE start_tile_bank) BANKED;
+void ui_load_text_cell(UBYTE tile, UBYTE character, UBYTE inverted) BANKED;
+void ui_place_text_cell(UBYTE x, UBYTE y, UBYTE tile) BANKED;
 
 #define UI_WAIT_WINDOW  1
 #define UI_WAIT_TEXT    2

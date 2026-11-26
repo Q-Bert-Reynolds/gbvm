@@ -287,6 +287,37 @@ inline void ui_set_tile(UBYTE * addr, UBYTE tile, UBYTE bank) {
     set_vram_byte(addr, tile);
 }
 
+// Fixed cells share the active dialogue font and palette. The caller reserves
+// the glyph tiles so scene graphics and actor sprites stay intact.
+void ui_load_text_cell(UBYTE tile, UBYTE character, UBYTE inverted) BANKED {
+    UBYTE pixels[16], i;
+    if (character == '\r') {
+        static const UBYTE return_icon[8] = {0x02, 0x02, 0x12, 0x22, 0x7e, 0x20, 0x10, 0x00};
+        for (i = 0; i != 8u; i++) pixels[i * 2u] = pixels[i * 2u + 1u] = return_icon[i];
+    } else if (character == '_') {
+        memset(pixels, 0, sizeof(pixels));
+        pixels[14] = pixels[15] = 0xffu;
+    } else {
+        UBYTE letter = (vwf_current_font_desc.attr & FONT_RECODE) ?
+            ReadBankedUBYTE(vwf_current_font_desc.recode_table + (character & vwf_current_font_desc.mask), vwf_current_font_bank) : character;
+        MemcpyBanked(pixels, vwf_current_font_desc.bitmaps + letter * 16u, sizeof(pixels), vwf_current_font_bank);
+    }
+    // Keep the glyph dark and shade the key's background, like a keyboard
+    // selection cell, rather than reversing it into a dialogue menu cursor.
+    if (inverted) for (i = 0; i != sizeof(pixels); i += 2u) {
+        pixels[i + 1u] |= pixels[i];
+        pixels[i] = 0xffu;
+    }
+#ifdef CGB
+    VBK_REG = VBK_BANK_0;
+#endif
+    set_bkg_data(tile, 1, pixels);
+}
+
+void ui_place_text_cell(UBYTE x, UBYTE y, UBYTE tile) BANKED {
+    ui_set_tile(GetWinAddr() + ((UWORD)y << 5) + x, tile, 0);
+}
+
 UBYTE ui_draw_text_buffer_char(void) BANKED {
     static UBYTE current_font_idx, current_text_bkg_fill, current_vwf_direction, current_text_ff_joypad, current_text_draw_speed;
 

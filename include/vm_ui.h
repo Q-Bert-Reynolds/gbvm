@@ -30,4 +30,6 @@ void vm_set_font(SCRIPT_CTX * THIS, UBYTE font_index) VM_CALL;
 
 void vm_set_text_sound(SCRIPT_CTX * THIS, UBYTE bank, UBYTE * offset, UBYTE channel_mask) VM_CALL;
 
+void vm_load_text_array(SCRIPT_CTX * THIS) VM_CALL;
+
 #endif
